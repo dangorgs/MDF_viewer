@@ -62,7 +62,7 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
         self.actionIntegration.triggered.connect(self.sig_integration)
         self.stack_all_btn.clicked.connect(self.stack_all)
         self.actionStack_all.triggered.connect(self.stack_all)
-        self.Shift_Sig_Button.clicked.connect(self.shift_signal_x_axis)
+        self.Shift_Sig_Button.clicked.connect(self.shift_signal)
         self.actionLoad_Configuration.triggered.connect(self.load_configuration)
         self.actionSave_Configuration.triggered.connect(self.save_configuration)
         
@@ -72,7 +72,7 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
         self.sig_integ_window=None
        
         #Verion
-        self.ver = "MDF Viewer v0.1"
+        self.ver = "MDF Viewer v1.7"
         #Set Main Window Title
         self.setWindowTitle(self.ver)
         
@@ -191,30 +191,54 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
             text="0",
             movable=True,
             position=0.5)
-#Shift sig
-    def shift_signal_x_axis(self):
+
+    def shift_signal(self):
         [current_id, channel_req, mdf_set_num, is_top_level, cg_id]=self.req_curr_chann()
-         
-        self.remove_plotted_sig(channel_req,mdf_set_num,current_id)
-        Channel_y=self.y_signal_type(channel_req,mdf_set_num,cg_id) 
-        #Get the time base i.e. 'Periodic Task 1'
-        Time_sig=self.mdf_ch_set[mdf_set_num].get_channel_data(list(self.channel_dict_set[mdf_set_num][cg_id].items())[0][0])
-        #Find the Timestamp for scaling
-        s = pd.Series(Time_sig)
-        difftime=s.diff(periods=-1) 
-        if (round(abs(difftime[10]),4)) is None:
-            time_const=1
-        else:
-            time_const=1/round(abs(difftime[10]),4)
+        if  not is_top_level: 
+            self.remove_plotted_sig(channel_req,mdf_set_num,current_id)
+            Channel_y=self.y_signal_type(channel_req,mdf_set_num,cg_id) 
+            #Get the time base i.e. 'Periodic Task 1'
+            Time_sig=self.mdf_ch_set[mdf_set_num].get_channel_data(list(self.channel_dict_set[mdf_set_num][cg_id].items())[0][0])
+            #Find the Timestamp 
+            s = pd.Series(Time_sig)
+            difftime=s.diff(periods=-1) 
+            if (round(abs(difftime[10]),4)) is None:
+                time_const=1
+            else:
+                time_const=1/round(abs(difftime[10]),4)
+                
+            #Shift in direction of X - axis                      
+            shift=int(self.Shift_Sig_X.value() * time_const)   
+            Channel_y=ndimage.shift(Channel_y, shift, output=None, order=3, mode='reflect', cval=0.0, prefilter=True)
+            #Shift in direction of Y - axis
+            y_val=self.Shift_Sig_Y.value()
+            Channel_y=np.add(Channel_y, y_val)
+            #Plot signal
+            self.plot_signal_vb(Time_sig,Channel_y,channel_req,mdf_set_num, current_id)
             
-        #Shift in direction of Y - axis                      
-        shift=int(self.Shift_Sig_X.value() * time_const)   
-        Channel_y=ndimage.shift(Channel_y, shift, output=None, order=3, mode='constant', cval=0.0, prefilter=True)
-        #Shift in direction of Y - axis
-        y_val=self.Shift_Sig_Y.value()
-        Channel_y=np.add(Channel_y, y_val)
-        #Plot signal
-        self.plot_signal_vb(Time_sig,Channel_y,channel_req,mdf_set_num, current_id)
+            Channel_y=self.cfg_sig_dict_set[mdf_set_num][cg_id].get(channel_req)
+        
+            #Add shift to all in configuration channel group
+            for i in range (len(self.cfg_sig_dict_set[mdf_set_num][cg_id])):
+                Ch_name=list(self.cfg_sig_dict_set[mdf_set_num][cg_id].items())[i][0]
+                Channel_y=self.cfg_sig_dict_set[mdf_set_num][cg_id].get(Ch_name)
+                Channel_y=ndimage.shift(Channel_y, shift, output=None, order=3, mode='reflect', cval=0.0, prefilter=True)
+                Channel_y=np.add(Channel_y, y_val)
+                self.keys_cfg_set[mdf_set_num][cg_id].append(Ch_name)
+                self.values_cfg_set[mdf_set_num][cg_id].append(Channel_y)                             
+                self.cfg_sig_dict_set[mdf_set_num][cg_id] = {self.keys_cfg_set[mdf_set_num][cg_id][index]: self.values_cfg_set[mdf_set_num][cg_id][index] for index in range(len(self.keys_cfg_set[mdf_set_num][cg_id]))}
+            #Add shift to all integreation signals if selected
+            if self.intg_sig_dict_set is not None:
+                for i in range (len(self.intg_sig_dict_set[mdf_set_num][cg_id])):
+                    Ch_name=list(self.intg_sig_dict_set[mdf_set_num][cg_id].items())[i][0]
+                    #Channel_y=self.y_signal_type(i,mdf_set_num,Ch_name) 
+                    Channel_y=self.intg_sig_dict_set[mdf_set_num][cg_id].get(Ch_name)
+                    Channel_y=ndimage.shift(Channel_y, shift, output=None, order=3, mode='reflect', cval=0.0, prefilter=True)
+                    Channel_y=np.add(Channel_y, y_val)
+                    self.keys_intg_set[mdf_set_num][cg_id].append(Ch_name)
+                    self.values_intg_set[mdf_set_num][cg_id].append(Channel_y)                             
+                    self.intg_sig_dict_set[mdf_set_num][cg_id] = {self.keys_intg_set[mdf_set_num][cg_id][index]: self.values_intg_set[mdf_set_num][cg_id][index] for index in range(len(self.keys_intg_set[mdf_set_num][cg_id]))}
+    
         return
     
     def plot_signal_vb(self,Time_sig,Channel_y,channel_req,mdf_set_num, current_id):
@@ -274,8 +298,8 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
                 "<b>"+channel_req_name + "="+ "</b>") 
         
         return
-#Configuration  
 
+    #Configuration  
     def set_back_cfg_sctack(self):
     
         self.cfg_sig_dict_set=[]
@@ -308,7 +332,6 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
                 #Use the new rules for new drop/file open actions
                 self.load_selected_signals()
                 
-
                 self.remove_all_tree_items()
                 self.refresh_tree_items()
                     
@@ -335,7 +358,6 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
         
         return
             
-    
     def save_configuration(self):
         try:
             qfd = QFileDialog.getExistingDirectory()
@@ -580,6 +602,8 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
                         ch_it= cg_ch.child(index)
                                 
                         it.removeChild(ch_it)
+                        
+        
                          
         self.set_back_cfg_sctack()
         
@@ -664,7 +688,6 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
                                 if list(group_itmes.values())[sig_val_index] in value:
                                     self.keys_cfg.append(list(self.selected_signals_yml)[key_index])
                                     y_value=self.mdf_ch_set[mdf_index].get_channel_data(value)  
-                                    #self.values_cfg.append(value)
                                     self.values_cfg.append(y_value) 
                                     self.keys_cfg_yml.append(list(self.selected_signals_yml)[key_index])  
                                     self.values_cfg_yml.append(value) 
@@ -710,8 +733,9 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
                 self.cfg_sig_dict_set_yml.append(group_itmes_set_yml)
                 self.keys_cfg_set_yml.append(key_item_set_yml)
                 self.values_cfg_set_yml.append(value_item_set_yml)  
-                   
+        #New mdf set was imported           
         elif ((len(self.cfg_sig_dict_set) != len(self.channel_dict_set))):        
+            #index based on the length of current cfg_sig_dict_set being one les then channel_dict_set
             index=len(self.cfg_sig_dict_set)
             self.cfg_sig_dict ={}
             self.cfg_sig_dict_yml =[]
@@ -727,7 +751,7 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
                             #Accessing dictionary value by index
                             if list(group_itmes.values())[sig_val_index] in value:
                                 self.keys_cfg.append(list(self.selected_signals_yml)[key_index])
-                                y_value=self.mdf_ch_set[mdf_index].get_channel_data(value)  
+                                y_value=self.mdf_ch_set[index].get_channel_data(value)  
                                 #self.values_cfg.append(value)
                                 self.values_cfg.append(y_value) 
                                 self.keys_cfg_yml.append(list(self.selected_signals_yml)[key_index])  
@@ -763,7 +787,8 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
                     #yml
                     group_itmes_set_yml.append(self.cfg_sig_dict_yml)
                     key_item_set_yml.append(self.keys_cfg_yml)
-                    value_item_set_yml.append(self.values_cfg_yml)         
+                    value_item_set_yml.append(self.values_cfg_yml)   
+                  
             
             self.cfg_sig_dict_set.append(group_itmes_set)
             self.keys_cfg_set.append(key_item_set)
@@ -772,6 +797,7 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
             self.cfg_sig_dict_set_yml.append(group_itmes_set_yml)
             self.keys_cfg_set_yml.append(key_item_set_yml)
             self.values_cfg_set_yml.append(value_item_set_yml)
+       
         return
     
     def fill_tbl_cfg(self):
@@ -900,6 +926,7 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
             final_dict = dict(zip(tbl_item_list, list(self.channel_dict_set[dict_set][dict_set_cg].values())))
             self.channel_dict_set[dict_set][dict_set_cg]=final_dict
             self.tbl_channel_dict_set= copy.deepcopy(self.channel_dict_set)
+            
             self.cfg_window.close()
             self.cfg_window=None
             self.write_yaml()
@@ -953,8 +980,11 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
         group_itmes_set=[]
         key_item_set=[]
         value_item_set=[]
+       
+        
         if  not self.intg_sig_dict_set:
-            for items in self.channel_dict_set:
+            #for items in self.channel_dict_set:
+            for items in self.cfg_sig_dict_set:
                 group_itmes_set=[]
                 for group_itmes in items:
                     self.intg_sig_dict =[]
@@ -963,13 +993,15 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
                     key_item_set.append(self.keys_intg)
                     value_item_set.append(self.values_intg)                    
                     group_itmes_set.append(self.intg_sig_dict)
-                self.intg_sig_dict_set.append(group_itmes_set)    
-                self.keys_intg_set.append(key_item_set)
-                self.values_intg_set.append(value_item_set)       
+            self.intg_sig_dict_set.append(group_itmes_set)    
+            self.keys_intg_set.append(key_item_set)
+            self.values_intg_set.append(value_item_set)       
             
-        elif ((len(self.intg_sig_dict_set) != len(self.channel_dict_set))):        
+        #elif ((len(self.intg_sig_dict_set) != len(self.channel_dict_set))): 
+        elif ((len(self.intg_sig_dict_set) != len(self.cfg_sig_dict_set))):        
             index=len(self.intg_sig_dict_set)
-            for group_itmes in self.channel_dict_set[index]:
+            #for group_itmes in self.channel_dict_set[index]:
+            for group_itmes in self.cfg_sig_dict_set[index]:
                 self.intg_sig_dict =[]
                 self.keys_intg=[]
                 self.values_intg=[]
@@ -980,7 +1012,7 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
             self.intg_sig_dict_set.append(group_itmes_set)
             self.keys_intg_set.append(key_item_set)
             self.values_intg_set.append(value_item_set)
-    
+        
         return
     
     def table_integ_element_cnd(self, item):
@@ -994,7 +1026,8 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
         channel_name = "∫_" + channel_req 
         
         if item.checkState() == Qt.Checked:
-            Channel_y=self.mdf_ch_set[dict_set].get_channel_data(self.channel_dict_set[dict_set][dict_set_cg].get(channel_req))
+            #Channel_y=self.mdf_ch_set[dict_set].get_channel_data(self.channel_dict_set[dict_set][dict_set_cg].get(channel_req))
+            Channel_y=self.cfg_sig_dict_set[dict_set][dict_set_cg].get(channel_req)
             #Get the time base i.e. 'Periodic Task 1'
             Time_sig=self.mdf_ch_set[dict_set].get_channel_data(list(self.channel_dict_set[dict_set][dict_set_cg].items())[0][0])
 
@@ -1024,7 +1057,8 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
         tbl_row=0
         index=self.ui.listMdf_SigIntg.currentRow()
         cg_index=self.ui.listCg_SigIntg.currentRow() 
-        tbl_row=len(self.tbl_channel_dict_set[index][cg_index])
+        #tbl_row=len(self.tbl_channel_dict_set[index][cg_index])
+        tbl_row=len(self.cfg_sig_dict_set[index][cg_index])
         self.ui.tableChannels_Integ.setRowCount(tbl_row)
         self.ui.tableChannels_Integ.setColumnCount(2)
         self.ui.tableChannels_Integ.setHorizontalHeaderLabels(["Select","Signal"])
@@ -1039,7 +1073,8 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
             
             for j in range(len(self.intg_sig_dict_set[index][cg_index])):
                 sig_integ=list(self.intg_sig_dict_set[index][cg_index].items())[j][0]
-                sig_src=list(self.tbl_channel_dict_set[index][cg_index].items())[i][0]
+                #sig_src=list(self.tbl_channel_dict_set[index][cg_index].items())[i][0]
+                sig_src=list(self.cfg_sig_dict_set[index][cg_index].items())[i][0]
                 sig_src = "∫_" + sig_src
                 #Fix: The .find() replaced with '=='
                 if ((sig_integ==sig_src ) and not any(sig_integ in word for word in checked_sig)):
@@ -1050,7 +1085,8 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
                 chkBoxItem.setCheckState(Qt.Unchecked)
         
             self.ui.tableChannels_Integ.setItem(i, 0, QTableWidgetItem(chkBoxItem))
-            self.ui.tableChannels_Integ.setItem(i, 1, QTableWidgetItem(list(self.tbl_channel_dict_set[index][cg_index].items())[i][0]))
+            #self.ui.tableChannels_Integ.setItem(i, 1, QTableWidgetItem(list(self.intg_sig_dict_set[index][cg_index].items())[i][0]))
+            self.ui.tableChannels_Integ.setItem(i, 1, QTableWidgetItem(list(self.cfg_sig_dict_set[index][cg_index].items())[i][0]))
             
             i+=1       
             
@@ -1091,6 +1127,7 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
                 self.set_back_cfg_sctack()
                 
                 self.init_cfg_data_set()
+                self.init_integ_data_set()
                 self.fill_tbl_cfg()
             else:
                 self.all_sig_sel=False          
@@ -1098,14 +1135,14 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
             self.all_sig_sel=False 
             self.ui.Channel_cfg_ButtonBox.setStandardButtons(QDialogButtonBox.Cancel|QDialogButtonBox.Save)
             self.remove_all_tree_items()
-            
-            self.load_selected_signals()
+            self.write_yaml()
             self.init_cfg_data_set()
+            self.init_integ_data_set()
             self.refresh_tree_items()
             self.fill_tbl_cfg()
         
         self.config_ch_yaml()
-        
+           
     def set_full_path_dict(self):
         for mdf_dict_index, cg_set_dict in enumerate(self.channel_dict_set):
             for cg_index, cg_dict in enumerate(cg_set_dict):
@@ -1182,6 +1219,11 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
         self.req_channels.clear()
         self.legend.clear()
         self.lcdNumber.display("0.0")     
+        self.delta_Time.setText("0.0")
+        self.delta_Y.setText("0.0")
+        self.text_Time.setText("0.0")
+        self.Shift_Sig_X.setValue(0.0000)
+        self.Shift_Sig_Y.setValue(0.0000)
     #Not used
     def mouse_clicked(self, mouseClickEvent):
         #Evaluation (select signal on the plot) : Not used
@@ -1476,7 +1518,7 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
             is_top_level=True
             current_id=0
             channel_req=0
-            mdf_set_num=0
+            mdf_set_num=top_level_id 
             cg_id = 0
             return current_id, channel_req, mdf_set_num, is_top_level, cg_id
         
@@ -1486,7 +1528,6 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
         cg_id=item.indexOfChild(cg_item)
         # Get the topl level item index 0....x
         mdf_set_num=self.treeWidget.indexOfTopLevelItem(item)  
-        
         return current_id, channel_req, mdf_set_num, is_top_level, cg_id
     
     def y_signal_type(self,channel_req,mdf_set_num,cg_id):
@@ -1494,7 +1535,9 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
         if (channel_req.find("∫") != -1):
             Channel_y=self.intg_sig_dict_set[mdf_set_num][cg_id].get(channel_req)
         else:
-            Channel_y=self.mdf_ch_set[mdf_set_num].get_channel_data(self.channel_dict_set[mdf_set_num][cg_id].get(channel_req))
+            Channel_y=self.cfg_sig_dict_set[mdf_set_num][cg_id].get(channel_req)
+            #The below call not neccesary as the y signals are loded into cfg_sig_dict_set as a congiguration setting
+            #Channel_y=self.mdf_ch_set[mdf_set_num].get_channel_data(self.channel_dict_set[mdf_set_num][cg_id].get(channel_req))
         return Channel_y
                         
     def tree_element_click(self):   
@@ -1509,7 +1552,6 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
         #Assume plot data is stored in arrays of xcoords, yvalues
         self.xcoords = Time_sig
         self.yvalues = Channel_y
-       
         self.plot_signal_vb(Time_sig,Channel_y,channel_req,mdf_set_num, current_id)
         return
           
@@ -1532,8 +1574,8 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
             mdf_file, _= QFileDialog.getOpenFileName()
             if(self.insert_mdf_ch(mdf_file)):
                 self.ena_act_menu()
-                self.init_integ_data_set()
                 self.init_cfg_data_set()
+                self.init_integ_data_set()
                 #Hold view box size after the first MDF import   
                 if (self.treeWidget.topLevelItemCount()<2):
                     self.hold_view()  
@@ -1593,8 +1635,8 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
                     
             if(self.insert_mdf_ch(mdf_file)):
                 self.ena_act_menu()
-                self.init_integ_data_set()
                 self.init_cfg_data_set()
+                self.init_integ_data_set()
             #Hold view box size after the first MDF import   
                 if (self.treeWidget.topLevelItemCount()<2):
                     self.hold_view()  
@@ -1720,7 +1762,7 @@ class MainWindow(Ui_MainWindow, Ui_Channel_Cfg, QMainWindow):
                     current_item=str(list(self.channel_dict_set[cg_item_id][i])[j])
                     new_item=str(list(self.selected_signals_yml)[key_index])
                     self.channel_dict_set[cg_item_id][i]= {new_item if k == current_item else k:v for k,v in self.channel_dict_set[cg_item_id][i].items()}
-                    tmo2=2
+                    
                        
         self.tbl_channel_dict_set= copy.deepcopy(self.channel_dict_set)
         return

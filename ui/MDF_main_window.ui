@@ -79,7 +79,7 @@
          </size>
         </property>
         <property name="decimals">
-         <number>2</number>
+         <number>5</number>
         </property>
         <property name="minimum">
          <double>-999999.989999999990687</double>
@@ -91,6 +91,9 @@
       </item>
       <item>
        <widget class="QDoubleSpinBox" name="Shift_Sig_Y">
+        <property name="decimals">
+         <number>5</number>
+        </property>
         <property name="minimum">
          <double>-999999.989999999990687</double>
         </property>

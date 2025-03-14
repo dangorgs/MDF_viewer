@@ -101,7 +101,7 @@ class Ui_MainWindow(object):
         self.Shift_Sig_X = QDoubleSpinBox(self.centralwidget)
         self.Shift_Sig_X.setObjectName(u"Shift_Sig_X")
         self.Shift_Sig_X.setMaximumSize(QSize(16777215, 16777215))
-        self.Shift_Sig_X.setDecimals(2)
+        self.Shift_Sig_X.setDecimals(5)
         self.Shift_Sig_X.setMinimum(-999999.989999999990687)
         self.Shift_Sig_X.setMaximum(999999.989999999990687)
 
@@ -109,6 +109,7 @@ class Ui_MainWindow(object):
 
         self.Shift_Sig_Y = QDoubleSpinBox(self.centralwidget)
         self.Shift_Sig_Y.setObjectName(u"Shift_Sig_Y")
+        self.Shift_Sig_Y.setDecimals(5)
         self.Shift_Sig_Y.setMinimum(-999999.989999999990687)
         self.Shift_Sig_Y.setMaximum(999999.989999999990687)
 
